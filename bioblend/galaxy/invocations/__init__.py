@@ -403,7 +403,7 @@ class InvocationClient(Client):
 
     # TODO: Move to a new ``bioblend.galaxy.short_term_storage`` module
     def _wait_for_short_term_storage(
-        self, storage_request_id: str, maxwait: float = 60, interval: float = 3
+        self, storage_request_id: str, maxwait: float = 60, interval: float = 3, rocrate: bool = False
     ) -> Dict[str, Any]:
         """
         Wait until a short term storage request is ready
@@ -427,10 +427,11 @@ class InvocationClient(Client):
 
         def check_and_get_short_term_storage() -> Dict[str, Any]:
             if self._get(url=is_ready_url):
-                try:
+                if not rocrate:
                     return self._get(url=url)
-                except:
+                elif rocrate:
                     return self.gi.make_get_request(url, stream=True)
+
             raise NotReady(f"Storage request {storage_request_id} is not ready")
 
         return wait_on(check_and_get_short_term_storage, maxwait=maxwait, interval=interval)
@@ -465,28 +466,7 @@ class InvocationClient(Client):
             url = f"{self.gi.url}/short_term_storage/{storage_request_id}/ready"
             return self._wait_for_short_term_storage(storage_request_id, maxwait=maxwait)
 
-    def get_invocation_rocrate_zip(self, invocation_id: str, file_path: str, chunk_size: int = CHUNK_SIZE) -> None:
-        """
-        Get a Workflow Run RO crate for an invocation.
-
-        :type invocation_id: str
-        :param invocation_id: Encoded workflow invocation ID
-
-        :type file_path: str
-        :param file_path: Path to save the report
-        """
-        url = self._make_url(invocation_id) + "/rocrate.zip"
-        print(url)
-        r = self.gi.make_get_request(url, stream=True)
-        if r.status_code != 200:
-            raise Exception(
-                "Failed to get the rocrate, the necessary dependencies may not be installed on the Galaxy server."
-            )
-        with open(file_path, "wb") as outf:
-            for chunk in r.iter_content(chunk_size):
-                outf.write(chunk)
-
-    def get_invocation_runrocrate_object(self, invocation_id: str, file_path: str, chunk_size: int = CHUNK_SIZE, maxwait: float = 1200) -> Dict[str, Any]:
+    def get_invocation_rocrate_zip(self, invocation_id: str, file_path: str, chunk_size: int = CHUNK_SIZE, maxwait: float = 1200) -> Dict[str, Any]:
         """
         Get a Workflow Run RO Crate object for an invocation.
 
@@ -514,7 +494,7 @@ class InvocationClient(Client):
         else:
             storage_request_id = psd["storage_request_id"]
             url = f"{self.gi.url}/short_term_storage/{storage_request_id}/ready"
-            r = self._wait_for_short_term_storage(storage_request_id, maxwait=maxwait)
+            r = self._wait_for_short_term_storage(storage_request_id, maxwait=maxwait, rocrate=True)
         if r.status_code != 200:
             raise Exception(
                 "Failed to get the rocrate, the necessary dependencies may not be installed on the Galaxy server."
