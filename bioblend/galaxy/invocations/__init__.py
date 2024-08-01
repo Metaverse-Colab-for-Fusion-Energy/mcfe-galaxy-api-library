@@ -462,6 +462,57 @@ class InvocationClient(Client):
             url = f"{self.gi.url}/short_term_storage/{storage_request_id}/ready"
             return self._wait_for_short_term_storage(storage_request_id, maxwait=maxwait)
 
+    def get_invocation_rocrate_zip(self, invocation_id: str, file_path: str, chunk_size: int = CHUNK_SIZE) -> None:
+        """
+        Get a Workflow Run RO crate for an invocation.
+
+        :type invocation_id: str
+        :param invocation_id: Encoded workflow invocation ID
+
+        :type file_path: str
+        :param file_path: Path to save the report
+        """
+        url = self._make_url(invocation_id) + "/rocrate.zip"
+        r = self.gi.make_get_request(url, stream=True)
+        if r.status_code != 200:
+            raise Exception(
+                "Failed to get the rocrate, the necessary dependencies may not be installed on the Galaxy server."
+            )
+        with open(file_path, "wb") as outf:
+            for chunk in r.iter_content(chunk_size):
+                outf.write(chunk)
+
+    def get_invocation_runrocrate_object(self, invocation_id: str, maxwait: float = 1200) -> Dict[str, Any]:
+        """
+        Get a Workflow Run RO Crate object for an invocation.
+
+        :type invocation_id: str
+        :param invocation_id: Encoded workflow invocation ID
+
+        :type maxwait: float
+        :param maxwait: Total time (in seconds) to wait for the Workflow Run RO Crate
+            object to become ready. After this time, a ``TimeoutException`` will
+            be raised.
+
+        :rtype: dict
+        :return: The Workflow Run RO Crate object
+        """
+        url = self._make_url(invocation_id) + "/prepare_store_download"
+        payload = {"model_store_format": "rocrate.zip"}
+        try:
+            psd = self._post(url=url, payload=payload)
+        except ConnectionError as e:
+            # Unsure about this section in here...
+            if e.status_code not in (400, 404):
+                raise
+            # Galaxy release_22.05 and earlier
+            url = self._make_url(invocation_id) + "/rocrate"
+            return self._get(url=url)
+        else:
+            storage_request_id = psd["storage_request_id"]
+            url = f"{self.gi.url}/short_term_storage/{storage_request_id}/ready"
+            return self._wait_for_short_term_storage(storage_request_id, maxwait=maxwait)
+
     def wait_for_invocation(
         self, invocation_id: str, maxwait: float = 12000, interval: float = 3, check: bool = True
     ) -> Dict[str, Any]:
