@@ -427,7 +427,10 @@ class InvocationClient(Client):
 
         def check_and_get_short_term_storage() -> Dict[str, Any]:
             if self._get(url=is_ready_url):
-                return self._get(url=url)
+                try:
+                    return self._get(url=url)
+                except:
+                    return self.gi.make_get_request(url, stream=True)
             raise NotReady(f"Storage request {storage_request_id} is not ready")
 
         return wait_on(check_and_get_short_term_storage, maxwait=maxwait, interval=interval)
@@ -483,7 +486,7 @@ class InvocationClient(Client):
             for chunk in r.iter_content(chunk_size):
                 outf.write(chunk)
 
-    def get_invocation_runrocrate_object(self, invocation_id: str, maxwait: float = 1200) -> Dict[str, Any]:
+    def get_invocation_runrocrate_object(self, invocation_id: str, file_path: str, chunk_size: int = CHUNK_SIZE, maxwait: float = 1200) -> Dict[str, Any]:
         """
         Get a Workflow Run RO Crate object for an invocation.
 
@@ -503,16 +506,22 @@ class InvocationClient(Client):
         try:
             psd = self._post(url=url, payload=payload)
         except ConnectionError as e:
-            # Unsure about this section in here...
             if e.status_code not in (400, 404):
                 raise
             # Galaxy release_22.05 and earlier
-            url = self._make_url(invocation_id) + "/rocrate"
-            return self._get(url=url)
+            # url = self._make_url(invocation_id) + "/rocrate"
+            # return self._get(url=url)
         else:
             storage_request_id = psd["storage_request_id"]
             url = f"{self.gi.url}/short_term_storage/{storage_request_id}/ready"
-            return self._wait_for_short_term_storage(storage_request_id, maxwait=maxwait)
+            r = self._wait_for_short_term_storage(storage_request_id, maxwait=maxwait)
+        if r.status_code != 200:
+            raise Exception(
+                "Failed to get the rocrate, the necessary dependencies may not be installed on the Galaxy server."
+            )
+        with open(file_path, "wb") as outf:
+            for chunk in r.iter_content(chunk_size):
+                outf.write(chunk)
 
     def wait_for_invocation(
         self, invocation_id: str, maxwait: float = 12000, interval: float = 3, check: bool = True
