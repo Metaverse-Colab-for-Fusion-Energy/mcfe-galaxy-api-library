@@ -473,6 +473,7 @@ class InvocationClient(Client):
         :param file_path: Path to save the report
         """
         url = self._make_url(invocation_id) + "/rocrate.zip"
+        print(url)
         r = self.gi.make_get_request(url, stream=True)
         if r.status_code != 200:
             raise Exception(
